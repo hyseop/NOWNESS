@@ -1,8 +1,5 @@
 package highfive.nowness.controller;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nimbusds.jose.util.Resource;
 import highfive.nowness.domain.User;
 import highfive.nowness.dto.*;
 import highfive.nowness.service.RequestBoardService;
@@ -12,8 +9,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.metrics.StartupStep;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -26,8 +21,9 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.util.UriUtils;
-
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -79,14 +75,14 @@ public class RequestBoardController {
 
         int postId = requestBoardService.addPost2(postData); //글 저장 + 글 번호 반환.
 
-        System.out.println(hashtags +":"+ postId);
 
         //글에 대한 해시태그 저장
         requestBoardService.addTags(hashtags, postId);
 
 
         //파일저장 :DB와 서버에 저장
-        String savePath = "c:/kdt/upload/nowness/"; //파일저장경로.
+//        String savePath = "c:/kdt/upload/nowness/"; //파일저장경로.
+        String savePath ="/usr/mydir/upload/";//서버 파일 저장경로
 
         for (MultipartFile file : files) {
             if (file.isEmpty() || file.getOriginalFilename() == null || file.getOriginalFilename().isEmpty()) {
@@ -144,6 +140,13 @@ public class RequestBoardController {
         List<RepliesDTO> comments = requestBoardService.getReply(contentsId);
 
         return comments;
+    }
+
+    //자식 댓글 갯수 가져오기(삭제x)
+    @GetMapping("/childCommentsCount")
+    @ResponseBody
+    public int childCommentsCount(@RequestParam("id") int id) {
+        return requestBoardService.childCommentsCount(id);
     }
 
 
@@ -207,7 +210,8 @@ public class RequestBoardController {
 
         if (fileData != null) {
            //파일 가져오는 경로
-            String filePath = "c:/kdt/upload/nowness/" + fileData.getSaveName();
+//            String filePath = "c:/kdt/upload/nowness/" + fileData.getSaveName();//로컬용
+            String filePath = "/usr/mydir/upload/" + fileData.getSaveName(); //서버용
 
             try {
                 byte[] fileContent = Files.readAllBytes(Paths.get(filePath));
@@ -263,7 +267,8 @@ public class RequestBoardController {
         //파일정보 가져오기.
         List<FileData>  fileDatalist = requestBoardService.getFileByContentsId(id);
 
-        System.out.println("파일들내용 : " +fileDatalist);
+        //댓글 개수(deleted=0)
+        int repliesCount = requestBoardService.getRepliesCount(id);
 
 
         //게시글에 좋아요 한 적있는지 로그인유저, 글번호로 체크 후 하트 이미지결정. heart-empty/full
@@ -279,7 +284,6 @@ public class RequestBoardController {
 
 
 
-
         //전달데이터
         model.addAttribute("postdetail", requestPost);
         model.addAttribute("nickname", nickname);
@@ -289,6 +293,8 @@ public class RequestBoardController {
         model.addAttribute("liked", booleanResult);
         model.addAttribute("tagslist", tagsDTOList);
         model.addAttribute("fileDatalist", fileDatalist);
+        model.addAttribute("repliesCount", repliesCount);
+
 
 
         return "requestpost";
@@ -333,11 +339,6 @@ public class RequestBoardController {
         model.addAttribute("tagslist", requestBoardService.getTags(id));
         //테스트중/파일정보 가져오기.
         model.addAttribute("existingFiles", requestBoardService.getFileByContentsId(id)); // Add the existing files to the model
-
-
-
-        System.out.println("파일들내용 : " +requestBoardService.getFileByContentsId(id));
-
 
         return "requestmodifypost";
     }
@@ -388,139 +389,76 @@ public class RequestBoardController {
         }
 
 
-//ㅌ스투ㅡ중----------
-        // Update files
-System.out.println("넘어온파일리스트 " + files.toString() + " 기존존재 세이브네임: " + existingSavenames);
-        // Get the list of existing files for the current post
+        //파일 관련--
+        //DB 해당게시글에 저장된 첨부파일(전체파일DTO)
         List<FileData> existingFilesList = requestBoardService.getFileByContentsId(postId);
 
+        //지울 목록 생성
+        List<Long> deleteFileList = new ArrayList<>();
 
-        System.out.println("기존 저장된 파일DTO: " +existingFilesList);
+        if (existingSavenames != null) {
+            for (FileData fileData : existingFilesList) {
+                if (!existingSavenames.contains(fileData.getSaveName())) {
+                    deleteFileList.add(fileData.getId());
+                }
+            }
+        } else {
+            for (FileData fileData : existingFilesList) {
+                deleteFileList.add(fileData.getId());
+            }
+        }
 
-// Create a set to keep track of existing save names
-        Set<String> existingSaveNames = existingFilesList.stream()
-                .map(FileData::getSaveName)
-                .collect(Collectors.toSet());
+        //DB서 파일정보 삭제
+        if (!deleteFileList.isEmpty()) {
+            requestBoardService.deleteFilesByIds(deleteFileList);
+        }
 
 
-        System.out.println("기존 존재하는 DTO에서가져온.  existingSaveNames: "+ existingSaveNames);
+        //파일저장 :DB와 서버에 저장
+//        String savePath = "c:/kdt/upload/nowness/"; //파일저장경로.로컬용
+        String savePath = "/usr/mydir/upload/"; //파일저장경로.서버용
 
-
-        //새파일리스트를만든다.
-// Create a list to store the new files
-        List<FileData> newFilesList = new ArrayList<>();
-// Create a list to store the files to keep (Comparison 1)
-        List<FileData> filesToKeep = new ArrayList<>();
-
-        // Process the uploaded files
         for (MultipartFile file : files) {
             if (file.isEmpty() || file.getOriginalFilename() == null || file.getOriginalFilename().isEmpty()) {
                 continue;
             }
 
             FileData fileData = new FileData();
-            String savePath = "c:/kdt/upload/nowness/"; // 파일 저장 경로.
 
-            String originalFilename = file.getOriginalFilename();
-            String fileExtension = originalFilename.substring(originalFilename.lastIndexOf('.') + 1);
+            fileData.setContentsid(postId);//글번호저장.
+            //원본이름+ _ +uuid + . + 확장자로 저장됨.
             String originalFilenameWithoutExtension = file.getOriginalFilename().substring(0, file.getOriginalFilename().lastIndexOf('.'));
+            String fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf('.') + 1);
             String savedFileName = originalFilenameWithoutExtension + "_" + UUID.randomUUID().toString() + "." + fileExtension;
 
-            fileData.setContentsid(postId); // Set the post ID
             fileData.setSaveName(savedFileName);
             fileData.setPath(savePath);
             fileData.setSize(file.getSize());
             fileData.setExt(fileExtension);
 
-            // Set the original name (remove the UUID and extension)
-            fileData.setOrginName(originalFilename);
-
-            // Check if the file already exists in the database (based on savename)
-            if (!existingSaveNames.contains(savedFileName)) {
-                // File is new, save it to the database and add it to the newFilesList (Comparison 2)
-                newFilesList.add(fileData);
-                requestBoardService.saveFileData(fileData);
-            } else {
-                // File already exists, add it to the filesToKeep list (Comparison 1)
-                filesToKeep.add(fileData);
+            //파일 뒤에 _로 끝나는거 에러 방지.
+            String originalFilename = file.getOriginalFilename();
+            if (originalFilename != null) {
+                if (originalFilename.endsWith("_")) {
+                    String[] parts = originalFilename.split("_");
+                    if (parts.length >= 2) {
+                        fileData.setOrginName(parts[0]);
+                    }
+                } else {
+                    fileData.setOrginName(originalFilename);
+                }
             }
 
-            System.out.println("새파일리스트2222 newFilesList: "+ newFilesList);
+            // DB저장
+            requestBoardService.saveFileData(fileData);
 
-            // Save the new file to the server (regardless of whether it's new or existing)
+            // 서버에 저장
             Path filePath = Paths.get(savePath, savedFileName);
             try {
                 Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
             } catch (IOException e) {
-                // Handle the exception as required
             }
         }
-
-        System.out.println("존--------재세이브네임: "+ existingSaveNames);
-// Identify existing files to delete (Comparison 3)
-        if (existingSavenames != null && !existingSavenames.isEmpty()) {
-            List<FileData> filesToDelete = existingFilesList.stream()
-                    .filter(file -> !existingSaveNames.contains(file.getSaveName()))
-                    .collect(Collectors.toList());
-
-
-// Delete the identified files from the database and server
-            for (FileData fileToDelete : filesToDelete) {
-                requestBoardService.deleteFileById(fileToDelete.getId());
-
-                Path filePath = Paths.get(fileToDelete.getPath(), fileToDelete.getSaveName());
-                try {
-                    Files.deleteIfExists(filePath);
-                } catch (IOException e) {
-                    // Handle the exception as required
-                }
-            }
-        }
-//        //파일저장 :DB와 서버에 저장===================================테스트중
-//
-//        String savePath = "c:/kdt/upload/nowness/"; //파일저장경로.
-//
-//        for (MultipartFile file : files) {
-//            if (file.isEmpty() || file.getOriginalFilename() == null || file.getOriginalFilename().isEmpty()) {
-//                continue;
-//            }
-//
-//            FileData fileData = new FileData();
-//
-//            fileData.setContentsid(postId);//글번호저장.
-//            //원본이름+ _ +uuid + . + 확장자로 저장됨.
-//            String originalFilenameWithoutExtension = file.getOriginalFilename().substring(0, file.getOriginalFilename().lastIndexOf('.'));
-//            String fileExtension = file.getOriginalFilename().substring(file.getOriginalFilename().lastIndexOf('.') + 1);
-//            String savedFileName = originalFilenameWithoutExtension + "_" + UUID.randomUUID().toString() + "." + fileExtension;
-//
-//            fileData.setSaveName(savedFileName);
-//            fileData.setPath(savePath);
-//            fileData.setSize(file.getSize());
-//            fileData.setExt(fileExtension);
-//
-//            //파일 뒤에 _로 끝나는거 에러 방지.
-//            String originalFilename = file.getOriginalFilename();
-//            if (originalFilename != null) {
-//                if (originalFilename.endsWith("_")) {
-//                    String[] parts = originalFilename.split("_");
-//                    if (parts.length >= 2) {
-//                        fileData.setOrginName(parts[0]);
-//                    }
-//                } else {
-//                    fileData.setOrginName(originalFilename);
-//                }
-//            }
-//
-//            // DB저장
-//            requestBoardService.saveFileData(fileData);
-//
-//            // 서버에 저장
-//            Path filePath = Paths.get(savePath, savedFileName);
-//            try {
-//                Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
-//            } catch (IOException e) {
-//            }
-//        }
 
 
         return "redirect:/request/post/"+id;
@@ -534,8 +472,8 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
     @GetMapping("/list")
     public String requestboardlist(Model model, @RequestParam(value = "page", required = false, defaultValue = "1") int page,
                                      @RequestParam(value = "boardType", required = false, defaultValue = "1") String boardType,
-                                     @RequestParam(value = "locale", required = false, defaultValue = "1") int locale,
-                                     @RequestParam(value = "subcategory", required = false, defaultValue = "1") int subcategory,
+                                   @RequestParam(value = "locale", required = false) Integer locale,
+                                   @RequestParam(value = "subcategory", required = false) Integer subcategory,
                                      @AuthenticationPrincipal User user,
                                      @AuthenticationPrincipal OAuth2User oAuth2User) {
 
@@ -545,17 +483,89 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
             UserUtil.addPublicUserInfoToModel(model, user);
         }
 
+        if(page<=0){
+            page=1;
+        }
+
+
+        //카테고리 있는 경우.
+        if(locale!=null && subcategory!=0){
+
+            Map<String, Integer> categoryListParams = new HashMap<>();
+            int pageSize = 10;//한페이지몇개보여줄래
+            int pageIndex = (page - 1) * pageSize;//페이징 인덱스.
+            categoryListParams.put("locale", locale);
+            categoryListParams.put("subcategory", subcategory);
+            categoryListParams.put("pageIndex", pageIndex);
+            categoryListParams.put("pageSize", pageSize);
+
+            //전체 게시글 갯수
+            int totalRequestCount = requestBoardService.categoryListMapCount(categoryListParams);
+            int totalPages = (int) Math.ceil((double) totalRequestCount / pageSize);
+
+            if (totalPages <= 0) {
+                totalPages = 1;
+            }
+
+            if(totalPages<page){
+                return "redirect:/request/list?page=" + totalPages + "&locale=" + locale + "&subcategory=" + subcategory;
+
+            }
+
+            Map<String, Integer> pagingParams = new HashMap<>();
+            pagingParams.put("boardType", Integer.parseInt(boardType));
+            pagingParams.put("pageIndex", pageIndex);
+            pagingParams.put("pageSize", pageSize);
+
+            List<RequestDTO> list = requestBoardService.categoryPagingList(categoryListParams);
+
+            //페이지네이션
+            int maxPagesToShow = 10;
+            int halfMaxPagesToShow = maxPagesToShow / 2;
+
+            int startPage = Math.max(page - halfMaxPagesToShow, 1);
+            int endPage = Math.min(page + halfMaxPagesToShow-1, totalPages);
+
+            // maxPagesToShow 페이지보다 적은 경우 startPage 및 endPage 조정
+            if (endPage - startPage + 1 < maxPagesToShow) {
+                if (startPage == 1) {
+                    endPage = Math.min(totalPages, maxPagesToShow);
+                } else {
+                    startPage = Math.max(1, endPage - maxPagesToShow + 1);
+                }
+            }
+
+            model.addAttribute("startPage", startPage);
+            model.addAttribute("endPage", endPage);
+            model.addAttribute("maxPagesToShow", maxPagesToShow);
+
+
+            model.addAttribute("lists", list); //페이징처리된 게시글 DTO
+            model.addAttribute("currentPage", page); //해당 페이지가 몇번째 페이지인지.
+            model.addAttribute("totalPages", totalPages);//총 페이지가 몇번째 까지 있는가.
+            model.addAttribute("totalRequestCount", totalRequestCount);//총 갯수.
+            model.addAttribute("user", user);
+            model.addAttribute("locale", locale);
+            model.addAttribute("subcategory", subcategory);
+
+
+            return "requestboard";
+
+        }
+
+
 
         int totalRequestCount = requestBoardService.getRequestsByBoardTypeCount(Integer.parseInt(boardType));
         int pageSize = 10;
         int totalPages = totalRequestCount > 0 ? (int) Math.ceil((double) totalRequestCount / pageSize) : 1;
         int pageIndex = (page - 1) * pageSize;
 
-        //강제로들어올때, 페이지 번호보정.
-        if (page <= 0) {
-            page = 1;
-        } else if (page > totalPages) {
-            page = totalPages;
+        if (totalPages <= 0) {
+            totalPages = 1;
+        }
+
+        if(totalPages<page){
+            return "redirect:/request/list";
         }
 
         Map<String, Integer> pagingParams = new HashMap<>();
@@ -564,6 +574,28 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         pagingParams.put("pageSize", pageSize);
         List<RequestDTO> list = requestBoardService.requestboardPagingList(pagingParams);
 
+
+
+        //페이지네이션
+        int maxPagesToShow = 10;
+        int halfMaxPagesToShow = maxPagesToShow / 2;
+
+        int startPage = Math.max(page - halfMaxPagesToShow, 1);
+        int endPage = Math.min(page + halfMaxPagesToShow-1, totalPages);
+
+        // maxPagesToShow 페이지보다 적은 경우 startPage 및 endPage 조정
+        if (endPage - startPage + 1 < maxPagesToShow) {
+            if (startPage == 1) {
+                endPage = Math.min(totalPages, maxPagesToShow);
+            } else {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+        }
+
+        model.addAttribute("startPage", startPage);
+        model.addAttribute("endPage", endPage);
+        model.addAttribute("maxPagesToShow", maxPagesToShow);
+
         model.addAttribute("lists", list); //페이징처리된 게시글 DTO
         model.addAttribute("currentPage", page); //해당 페이지가 몇번째 페이지인지.
         model.addAttribute("totalPages", totalPages);//총 페이지가 몇번째 까지 있는가.
@@ -575,113 +607,6 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
     }
 
 
-    //ajax이후 화면
-    @GetMapping("/listtest")
-    public String ajaxafterlist(Model model, @RequestParam(value = "page", required = false, defaultValue = "1") int page,
-                                     @RequestParam(value = "boardType", required = false, defaultValue = "1") String boardType,
-                                     @RequestParam(value = "locale", required = false, defaultValue = "1") int locale,
-                                     @RequestParam(value = "subcategory", required = false, defaultValue = "1") int subcategory,
-                                     @AuthenticationPrincipal User user,
-                                     @AuthenticationPrincipal OAuth2User oAuth2User) {
-
-        //유저 로그인여부판단 후 user에 등록. //비로그인user = null
-        if (!UserUtil.isNotLogin(user, oAuth2User)) {
-            if (user == null) user = UserUtil.convertOAuth2UserToUser(oAuth2User);
-            UserUtil.addPublicUserInfoToModel(model, user);
-        }
-
-        Map<String, Integer> categoryListParams = new HashMap<>();
-        int pageSize = 10;//한페이지몇개보여줄래
-        int pageIndex = (page - 1) * pageSize;//페이징 인덱스.
-        categoryListParams.put("locale", locale);
-        categoryListParams.put("subcategory", subcategory);
-        categoryListParams.put("pageIndex", pageIndex);
-        categoryListParams.put("pageSize", pageSize);
-
-        //전체 게시글 갯수
-        int totalRequestCount = requestBoardService.categoryListMapCount(categoryListParams);
-        int totalPages = (int) Math.ceil((double) totalRequestCount / pageSize);
-
-        //강제로들어올때, 페이지 번호보정.
-        if (page <= 0) {
-            page = 1;
-        } else if (page > totalPages) {
-            page = totalPages;
-        }
-
-        Map<String, Integer> pagingParams = new HashMap<>();
-        pagingParams.put("boardType", Integer.parseInt(boardType));
-        pagingParams.put("pageIndex", pageIndex);
-        pagingParams.put("pageSize", pageSize);
-
-        List<RequestDTO> list = requestBoardService.categoryPagingList(categoryListParams);
-
-
-        model.addAttribute("lists", list); //페이징처리된 게시글 DTO
-        model.addAttribute("currentPage", page); //해당 페이지가 몇번째 페이지인지.
-        model.addAttribute("totalPages", totalPages);//총 페이지가 몇번째 까지 있는가.
-        model.addAttribute("totalRequestCount", totalRequestCount);//총 갯수.
-        model.addAttribute("user", user);
-        model.addAttribute("locale", locale);
-        model.addAttribute("subcategory", subcategory);
-
-
-        return "requestboard";
-    }
-
-
-
-
-    //다시테스트중.
-    @GetMapping("/ajaxlist")
-    @ResponseBody
-    public Map<String, Object> usingajax(
-                                    @RequestParam(value = "page", required = false, defaultValue = "1") int page,
-                                    @RequestParam(value = "boardType", required = false, defaultValue = "1") String boardType,
-                                    @RequestParam(value = "locale", required = false, defaultValue = "1") int locale,
-                                    @RequestParam(value = "subcategory", required = false, defaultValue = "1") int subcategory
-                                     ) {
-
-        Map<String, Object> response = new HashMap<>();
-        int pageSize = 10;
-        int pageIndex = (page - 1) * pageSize;
-
-
-        //페이징 : mapper- boardPagingList 게시판타입, 시작인덱스, 갯수(1페이지당)
-        //반환값: 페이징처리된 DTO 리스트로 받아옴.
-        Map<String, Integer> categoryListParams = new HashMap<>();
-        categoryListParams.put("locale", locale);
-        categoryListParams.put("subcategory", subcategory);
-        categoryListParams.put("pageIndex", pageIndex);
-        categoryListParams.put("pageSize", pageSize);
-
-        //토탈 갯수-게시글(카테고리별)
-        int totalRequestCount = requestBoardService.categoryListMapCount(categoryListParams);
-        int totalPages = (int) Math.ceil((double) totalRequestCount / pageSize);
-
-        //강제로들어올때, 페이지 번호보정.
-        if (page <= 0) {
-            page = 1;
-        } else if (page > totalPages) {
-            page = totalPages;
-        }
-
-        Map<String, Integer> pagingParams = new HashMap<>();
-        pagingParams.put("boardType", Integer.parseInt(boardType));
-        pagingParams.put("pageIndex", pageIndex);
-        pagingParams.put("pageSize", pageSize);
-
-
-        List<RequestDTO> list = requestBoardService.categoryPagingList(categoryListParams);
-
-
-        response.put("requestList", list);
-        response.put("currentPage", page);
-        response.put("totalPages", totalPages);
-        response.put("totalRequestCount", totalRequestCount);
-
-        return response;
-    }
 
     
     // 조회 : 전체글에대한것만 가능 - 조회항목 : 제목 / 내용 / 이름
@@ -700,6 +625,10 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
             UserUtil.addPublicUserInfoToModel(model, user);
         }
 
+        if(page<=0){
+           page=1;
+        }
+
         //검색컬럼 : searchType = title, contents, user_id (제목, 내용, 작성자)
         //검색어 : searchKeyword
 
@@ -713,17 +642,19 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         int pageIndex = (page - 1) * pageSize;
         int totalPages = (int) Math.ceil((double) totalRequestCount / pageSize);
 
-        //없는 페이지 요구시 보정.
-        if (page <= 0) {
-            page = 1;
-        } else if (page > totalPages) {
-            page = totalPages;
-//                if(searchKeyword!=null && searchType!=null){
-//                redirectAttributes.addAttribute("page", totalPages);
-//                return "redirect:/request/list/search?page={totalPages}&searchType={searchType}&searchKeyword={searchKeyword}";
-//                }else{
-//                    page = totalPages;
-//                }
+        if (totalPages <= 0) {
+            totalPages = 1;
+        }
+
+        if (page > totalPages) {
+            try {
+                searchKeyword = URLEncoder.encode(searchKeyword, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+            }
+
+            return "redirect:/request/list/search?page=" + totalPages +
+                    "&searchType=" + searchType +
+                    "&searchKeyword=" + searchKeyword;
         }
 
 
@@ -738,6 +669,21 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         List<RequestDTO> list = requestBoardService.searchPagingList(pagingParams);
 
 
+        //페이지네이션
+        int maxPagesToShow = 10;
+        int halfMaxPagesToShow = maxPagesToShow / 2;
+
+        int startPage = Math.max(page - halfMaxPagesToShow, 1);
+        int endPage = Math.min(page + halfMaxPagesToShow-1, totalPages);
+
+        // maxPagesToShow 페이지보다 적은 경우 startPage 및 endPage 조정
+        if (endPage - startPage + 1 < maxPagesToShow) {
+            if (startPage == 1) {
+                endPage = Math.min(totalPages, maxPagesToShow);
+            } else {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+        }
 
         //모델에 정보 넣어서 뷰로 보냄.
         model.addAttribute("lists", list); //페이징처리된 게시글 DTO
@@ -747,8 +693,11 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         model.addAttribute("user", user);
         model.addAttribute("searchType", searchType);
         model.addAttribute("searchKeyword", searchKeyword);
+        model.addAttribute("startPage", startPage);
+        model.addAttribute("endPage", endPage);
+        model.addAttribute("maxPagesToShow", maxPagesToShow);
 
-        return "/requestboard";
+        return "requestboard";
 
     }
 
@@ -804,6 +753,9 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
             UserUtil.addPublicUserInfoToModel(model, user);
         }
 
+        if (page <= 0) {
+            page = 1;
+        }
 
         int totalRequestCount = requestBoardService.searchTagListCount(tag);
 
@@ -811,11 +763,17 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         int pageIndex = (page - 1) * pageSize;
         int totalPages = (int) Math.ceil((double) totalRequestCount / pageSize);
 
-        //없는 페이지 요구시 보정.
-        if (page <= 0) {
-            page = 1;
-        } else if (page > totalPages) {
-            page = totalPages;
+        if (totalPages <= 0) {
+            totalPages = 1;
+        }
+
+        if (page > totalPages) {
+            try {
+                tag = URLEncoder.encode(tag, "UTF-8");
+            } catch (UnsupportedEncodingException e) {
+            }
+            return "redirect:/request/list/searchtag?page=" + totalPages +
+                    "&tag=" + tag;
         }
 
 
@@ -827,6 +785,30 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         List<RequestDTO> list = requestBoardService.searchPagingTagList(pagingParams);
 
 
+
+        //페이지네이션
+        int maxPagesToShow = 10;
+        int halfMaxPagesToShow = maxPagesToShow / 2;
+
+        int startPage = Math.max(page - halfMaxPagesToShow, 1);
+        int endPage = Math.min(page + halfMaxPagesToShow-1, totalPages);
+
+        // maxPagesToShow 페이지보다 적은 경우 startPage 및 endPage 조정
+        if (endPage - startPage + 1 < maxPagesToShow) {
+            if (startPage == 1) {
+                endPage = Math.min(totalPages, maxPagesToShow);
+            } else {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+        }
+
+        model.addAttribute("startPage", startPage);
+        model.addAttribute("endPage", endPage);
+        model.addAttribute("maxPagesToShow", maxPagesToShow);
+
+
+
+
         //모델에 정보 넣어서 뷰로 보냄.
         model.addAttribute("lists", list); //페이징처리된 게시글 DTO
         model.addAttribute("currentPage", page); //해당 페이지가 몇번째 페이지인지.
@@ -835,7 +817,7 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
         model.addAttribute("user", user);
         model.addAttribute("searchtag", tag);
 
-        return "/requestboard";
+        return "requestboard";
 
     }
 
@@ -846,13 +828,24 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
 
 //구현해야할 목록 --------------
 
-//리스트 - 왜......없는 페이지번호 쓰면, 에러로가고.. 페이지 보정이안됨??
+//[필수]
 
-//첨부파일 : 미구현--->해야함
+//1. 글수정 -첨부파일(다중삭제에러), 용량제한.
+//2. 게시판리스트 : 보여주는 형식 앨범형,(hover?)...(이미지 서버이미지 보여줘야하는데.얘가문제)
+//3. 신고기능- 댓글, 글, 사용자..???
+//4. 글 상세 - 게시글 목록버튼.
+//5. 최그인기태그, 최근 등록태그들 모아서 옆에 보여줄수있나
+//6. 배포..
 
+//코드 정리..(,,,)
+
+//[시간남으면 추가구현] --
+//카테고리별분류 + 검색
+//이미지 서버이미지 보여줘야하는데.....
 //지도 : 미구현--->해야함
-
 //API유해콘텐츠 : 미구현--->해야함
+//댓글 페이징
+//이전글 다음글 목록
 
 //---------부분구현
 
@@ -860,30 +853,25 @@ System.out.println("넘어온파일리스트 " + files.toString() + " 기존존�
 
 //검색 : 전체 게시물에서 제목, 내용, 작성자로 조회가능.(카테고리별로는 불가)
 
-//게시글 등록 : 부분구현.(이미지멀티미디어 아직)
+//게시글 등록 : 부분구현.(불완전)
 
-//게시글 수정 : 부분구현.(이미지멀티미디어 아직)
+//게시글 수정 : 부분구현.(불완전)
 
-//게시글 세부내용 : 세부내용, 댓글 조회까지 o(신고, 좋아요,미구현)
+//게시글 세부내용 : 세부내용, 댓글 조회, 좋아요까지 o(신고 미구현)
 
-//코멘트 : 조회O, 등록o, 삭제o,작성자만 삭제가능o --->대댓글 미구현.
+//코멘트 : 조회O, 등록o, 삭제o,작성자만 삭제가능o, 대댓구현 --->원본댓만 삭제되었을때 남기는 방법 조금 더 연구필요.
 
 //게시판리스트 :카테고리별구현O
 
 //---------완료
+//첨부파일 :o 첨부, 다운, 조회,삭제o - 에러발생 : 다중삭제시
 //해시태그 ok 등록,수정,삭제,조회,검색 가능.
 //글 수정, post변경o
 //게시글 삭제 : 구현O
 //대댓글 등록: 구현(1단계대댓만 가능)
+//필수--완료
+//1. CSS o..
+//2.글수정 - 글자수제한,
+//3.글 상세 - 댓글 갯수
+//4. 아이디 누르면, 검색으로 링크걸음
 
-
-//태그저장.테스트--------
-
-//        requestBoardService.addTag(postData);
-//        // Save hashtags to Tags table
-//        for (String tag : hashtags) {
-//            StartupStep.Tags tagData = new StartupStep.Tags();
-//            tagData.setContentsId(postData.getId()); // Assuming you have a getId() method in Contents class
-//            tagData.setTag(tag);
-//            tagsService.addTag(tagData);
-//        }

@@ -15,60 +15,6 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
 
-    <style>
-        .col-sm-12 sub{
-            display: inline-block;
-            clear:both;
-            float:left;
-        }
-
-        .subReplyWithMargin {
-            margin-left: 3%;
-            width: 97%;
-        }
-
-
-        button.postmodifybtn{
-            /*text-align: right;*/
-            float: right;
-        }
-
-        button.deletereplybtn {
-
-            border-color: transparent;
-            background-color: transparent;
-            margin: 0px;
-
-        }
-
-        a {
-            text-decoration: none;
-            color : black;
-        }
-
-        .button-container {
-            display: flex;
-            justify-content: flex-end;
-            margin : 8px;
-        }
-
-        .button-container form,
-        .button-container button {
-            margin-left: 1%; /* Adjust the spacing between the buttons */
-            /*padding: 3px;*/
-            width: 60px;
-            height: 35px;
-
-        }
-
-        textarea {
-            resize: none;
-        }
-
-    </style>
-
-
-
 
     <script th:inline="javascript">
         $(document).ready(function() {
@@ -84,7 +30,6 @@
 
             // 페이지 로드 시 댓글 가져오기
             getReplyList(boardId);
-
 
             //댓글 textarea 엔터처리용.
             //enter => <br>
@@ -239,7 +184,6 @@
 
 
 
-
             //댓글 삭제 : 작성자와 로그인 유저가 맞는지 확인 , 삭제여부 확인 후 삭제.
             $(document).on("click", ".deletereplybtn", function(event) {
                 event.preventDefault();
@@ -272,34 +216,40 @@
                 if (loginuser == null) {
                     alert("로그인해주세요");
                 } else {
-                    if (liked) {
-                        alert("이미 좋아요를 누르셨습니다. 더 이상 좋아요를 누를 수 없습니다.");
-                    } else {
-                        var wantToLike = window.confirm("좋아요를 하시겠습니까?");
-                        //좋아요 저장
-                        if (wantToLike) {
-                            $.ajax({
-                                url: "/request/insertlike",
-                                data: {
-                                    "contentsid": boardId,
-                                    "userid": loginuser,
-                                },
-                                beforeSend: function (xhr) {
-                                    xhr.setRequestHeader(header, token);
-                                },
-                                type: "post",
-                                success: function (result) {
-                                    liked = result;
-                                    updateHeartState(liked, result ? likes + 1 : likes);
-                                },
-                                error: function () {
-                                    alert("error occur");
-                                }
-                            });//ajax end-좋아요등록 end
+                    if(verifiedUser == true) {
+                        if (liked) {
+                            alert("이미 좋아요를 누르셨습니다. 더 이상 좋아요를 누를 수 없습니다.");
+                        } else {
+                            var wantToLike = window.confirm("좋아요를 하시겠습니까?");
+                            //좋아요 저장
+                            if (wantToLike) {
+                                $.ajax({
+                                    url: "/request/insertlike",
+                                    data: {
+                                        "contentsid": boardId,
+                                        "userid": loginuser,
+                                    },
+                                    beforeSend: function (xhr) {
+                                        xhr.setRequestHeader(header, token);
+                                    },
+                                    type: "post",
+                                    success: function (result) {
+                                        liked = result;
+                                        updateHeartState(liked, result ? likes + 1 : likes);
+                                    },
+                                    error: function () {
+                                        alert("error occur");
+                                    }
+                                });//ajax end-좋아요등록 end
 
-                        } else { alert("좋아요를 취소하셨습니다."); }
+                            } else {
+                                alert("좋아요를 취소하셨습니다.");
+                            }
+                        }//좋아요OX,인증된사람만.
+                    }else{
+                        alert("이메일 인증을 완료해주시기 바랍니다.");
                     }
-                }
+                }//if end
             });//좋아요 클릭이벤트end
 
 
@@ -362,6 +312,27 @@
         }//getnicknameforcomment end
 
 
+      //삭제되지않은 자식댓글개수 체크
+            function childCommentsCount(id) {
+                    var childcount='';
+                $.ajax({
+                    url: "/request/childCommentsCount",
+                    data: {
+                        "id": id
+                    },
+                    type: "get",
+                    success: function(result) {
+
+                        console.log(result);
+                      return childcount=result;
+
+                    },
+                    error: function() {
+                    }
+                });
+
+            }//
+
 
         // 댓글 리스트 가져오기
         function getReplyList(boardId) {
@@ -381,61 +352,104 @@
         }//getreplylist end
 
 
-        // 댓글 보여주는 기능
-        function drawReply(replys) {
-            var html = '';
+            // 댓글 보여주는 기능
+            function drawReply(replys) {
+                var html = '';
 
-            replys.forEach(function(reply) {
-                if (reply.parentid == 0) {
-                    var nickname = getNicknameForComment(reply.id);
+                replys.forEach(function(reply) {
+                    if (reply.parentid == 0) {
+                        if (reply.deleted == 1) {
+                            //글삭제되면, 칸없어짐.
+                            html += '<div class="row">';
+                            html += '<div class="col-sm-12" id="delete_' + reply.id + '">';
+                            html += '<span></span>';
+                            // html += '<hr>';
+                            html += '</div></div>';
+                            html += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div>';
+                            return; // Skip the rest of the iteration
+                        }
 
-                    html += '<div class="row"><div class="col-sm-12">';
-                    html += '<form class="form-inline" action="/writeReply" method="post">';
-                    html += '<label for="pwd" class="mr-sm-2">' + "[작성자 : " + nickname + " ] " + '</label>';
-                    html += '<label for="pwd" class="mr-sm-2">' + "( " + reply.createddatetime + ")"+ '</label>';
+                        var nickname = getNicknameForComment(reply.id);
 
-                    html += '<button type="button" id="re_replyaddbtn" class="btn btn-primary mb-2 re_replyaddbtn" data-replyid="' + reply.id + '" ' +
-                        'style="background-color: transparent; border-color: transparent; width: 48.46px; height: 38.48px; ">';
-                    html += '<img src="/images/reply.png" alt="Button Image" width="18px" height="18px" style="vertical-align: middle;">';
-                    html += '</button>';
+                        html += '<div class="row"><div class="col-sm-12">';
+                        html += '<form class="form-inline" action="/writeReply" method="post">';
+                        html += '<label for="pwd" class="mr-sm-2">' + "[작성자 : " + nickname + " ] " + '</label>';
+                        html += '<label for="pwd" class="mr-sm-2">' + "( " + reply.createddatetime + ")"+ '</label>';
 
-                    html += '<button type="button" class="btn btn-primary mb-2 deletereplybtn" data-replyid="' + reply.id + '" data-replyuserid="' + reply.userid + '">❌</button>';
-                    html += '<br>';
-                    html += '<label for="pwd" class="mr-sm-2">' + reply.reply.replace(/\n/g, '<br>') + '</label>';
-                    html += '<hr>';
+                        html += '<button type="button" id="re_replyaddbtn" class="btn btn-primary mb-2 re_replyaddbtn" data-replyid="' + reply.id + '" ' +
+                            'style="background-color: transparent; border-color: transparent; width: 48.46px; height: 38.48px; ">';
+                        html += '<img src="/images/reply.png" alt="Button Image" width="18px" height="18px" style="vertical-align: middle;">';
+                        html += '</button>';
 
-                    html += '</div></div>'; // Close the main comment div
-                    html += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div>'; // Container for re-replies
+                        html += '<button type="button" class="btn btn-primary mb-2 deletereplybtn" data-replyid="' + reply.id + '" data-replyuserid="' + reply.userid + '">❌</button>';
+                        html += '<br>';
+                        html += '<label for="pwd" class="mr-sm-2">' + reply.reply.replace(/\n/g, '<br>') + '</label>';
+                        html += '<hr>';
 
-                    html += '<div class="row re-reply-input" style="display: none;">';
-                    html += '<div class="col-sm-12">';
-                    html += '<textarea class="form-control mb-2 mr-sm-2 re-reply-textarea" placeholder="Enter your re-reply"></textarea>';
-                    html += '<button type="button" class="btn btn-outline-dark re-reply-submitbtn" data-replyid="' + reply.id + '">Submit</button>';
-                    html += '</div></div>';
-                    // html += '<br>';
+                        html += '</div></div>'; // Close the main comment div
+                        html += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div>'; // Container for re-replies
 
-                    html += '<input type="hidden" name="id" th:value="${postdetail.id}">';
-                    html += '<input type="hidden" name="parentid" th:value="' + reply.id + '">';
-                    html += '</form>';
-                }
-            });
+                        html += '<div class="row re-reply-input" style="display: none;">';
+                        html += '<div class="col-sm-12">';
+                        html += '<textarea class="form-control mb-2 mr-sm-2 re-reply-textarea" placeholder="Enter your re-reply"></textarea>';
+                        html += '<button type="button" class="btn btn-outline-dark re-reply-submitbtn" data-replyid="' + reply.id + '">Submit</button>';
+                        html += '</div></div>';
+                        // html += '<br>';
 
-            $("#replyArea").html(html);
-            replys.forEach(function(reply) {
-                if (reply.parentid != 0) {
-                    var nickname = getNicknameForComment(reply.id);
-                    var subHtml = '';
-                    subHtml = '<div class="row"><div class="col-sm-12 subReply subReplyWithMargin">';
-                    subHtml += '<label for="pwd" class="mr-sm-2 sub">' + "└[작성자 : " + nickname + " ] " + "( " + reply.createddatetime + ")" + '</label>';
-                    subHtml += '<button type="button" class="mr-sm-2 sub deletereplybtn" data-replyid="' + reply.id + '" data-replyuserid="' + reply.userid + '">❌</button>';
-                    subHtml += '<label for="pwd" class="col-sm-12 sub">' + reply.reply.replace(/\n/g, '<br>') + '</label>';
-                    subHtml += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div></div></div>';
-                    subHtml += '<hr>';
+                        html += '<input type="hidden" name="id" th:value="${postdetail.id}">';
+                        html += '<input type="hidden" name="parentid" th:value="' + reply.id + '">';
+                        html += '</form>';
+                    }
 
-                    $(".sub" + reply.parentid).append(subHtml);
-                }
-            });
-        }
+                });
+
+                $("#replyArea").html(html);
+                replys.forEach(function(reply) {
+                    if (reply.parentid != 0) {
+                        var subHtml = '';
+                        var nickname = getNicknameForComment(reply.id);
+
+                        // 부모 확인
+                        var parentReply = replys.find(function(parent) {
+                            return parent.id === reply.parentid;
+                        });
+
+                        if (parentReply && parentReply.deleted == 1) {
+                            if(reply.deleted==1){//부모없음, 자식없음
+                                // document.getElementById('delete_' + parentReply.id).innerHTML = '';
+                            }else{ //부모없음 /자식있음
+                                subHtml += '<div class="row">';
+                                subHtml += '<div class="col-sm-12 subReply subReplyWithMargin">';
+                                subHtml += '<label for="pwd" class="mr-sm-2 sub">' + "└[작성자 : " + nickname + " ] " + "( " + reply.createddatetime + ")" + '</label>';
+                                subHtml += '<button type="button" class="mr-sm-2 sub deletereplybtn" data-replyid="' + reply.id + '" data-replyuserid="' + reply.userid + '">❌</button>';
+                                subHtml += '<label for="pwd" class="col-sm-12 sub">' + reply.reply.replace(/\n/g, '<br>') + '</label>';
+                                subHtml += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div></div></div>';
+                                subHtml += '<hr>';
+                            }
+                        }
+                        else {//부모 존재
+                            if(reply.deleted==1){//부모존재, 자식삭제   "부모존재, 자식삭제"+
+                                subHtml += '<div class="row">';
+                                subHtml += '<div class="col-sm-12 subReply subReplyWithMargin">';
+                                // subHtml += '<label for="pwd" class="col-sm-12 sub">' + '</label>';
+                                subHtml += '<div class="row"></div></div></div>';
+                                // subHtml += '<hr>';
+                            }else{//부모있음, 자식있음.
+                                subHtml += '<div class="row">';
+                                subHtml += '<div class="col-sm-12 subReply subReplyWithMargin">';
+                                subHtml += '<label for="pwd" class="mr-sm-2 sub">' + "└[작성자 : " + nickname + " ] " + "( " + reply.createddatetime + ")" + '</label>';
+                                subHtml += '<button type="button" class="mr-sm-2 sub deletereplybtn" data-replyid="' + reply.id + '" data-replyuserid="' + reply.userid + '">❌</button>';
+                                subHtml += '<label for="pwd" class="col-sm-12 sub">' + reply.reply.replace(/\n/g, '<br>') + '</label>';
+                                subHtml += '<div class="row"><div class="col-sm-12 sub' + reply.id + '"></div></div></div></div>';
+                                subHtml += '<hr>';
+                            }
+                        }
+
+                        $(".sub" + reply.parentid).append(subHtml);
+                    }
+                });
+
+            }
 
 
 
@@ -475,9 +489,6 @@
 });// ready end
 
 
-
-
-
     </script>
 
 </head>
@@ -493,7 +504,7 @@
 
 <!--게시글 세부내용 본문-->
 <div class="container">
-    <a class="btn btn-light" id="backbtn" href="javascript:history.back()">back</a>
+    <a id="backbtn" href="javascript:history.back()"><img src="/images/back2.png" alt="download" width="30px" height="30px"></a>
 
     <!--게시글 상세내용-->
     <div id="main">
@@ -507,16 +518,16 @@
                 <!--오른쪽부분 날짜와 닉네임-->
                 <div class="meta">
                     <time class="published" th:text="${#temporals.format(postdetail.createdDatetime,'yyyy-MM-dd HH:mm:ss')}"></time>
-                    <a href="#" class="author"><span class="name" th:text="${nickname}"></span><img src="images/avatar.jpg" alt="" /></a>
+                    <a th:href="@{'/request/list/search?searchType=user_id&searchKeyword=' + ${nickname}}" class="author"><span class="name" th:text="${nickname}"></span><img src="images/avatar.jpg" alt="" /></a>
                 </div>
             </header>
 
             <!-- 글 본문 자리-->
             <p th:utext="${postdetail.contents}"></p>
 
-
             <!-- 로그인 유저 확인 후, 게시글 작성자와 일치하면 수정/삭제 버튼 생성-->
             <footer>
+                <div id="details">
                 <ul class="stats">
                     <li><a href="#" class="icon solid fa-view">view <span th:text="${postdetail.views}"></span></a></li>
                     <li id="likesContainer">
@@ -526,13 +537,15 @@
                             <span id="likesCount" th:text="${likes}"></span>
                         </a>
                     </li>
-                    <li><a href="#" class="icon solid fa-comment">comment <span th:text="${comments.size()}"></span></a></li>
+                    <li><a href="#" class="icon solid fa-comment">comment <span th:text="${repliesCount}"></span></a></li>
                     <li><a href="#" class="icon solid fa-report">report</a></li>
                 </ul>
 
+                </div>
 
                 <!-- 해시태그 -->
-
+                <div id="hashtags">
+                    <img th:if="${tagslist.size() > 0}" src="/images/tag.png" alt="download" width="20px" height="20px">
                 <ul  class="stats" th:each="tag : ${tagslist}">
                     <li>
                         <a  class="icon solid fa-tag" th:href="@{'/request/list/searchtag?page=1&tag=' + ${tag.tag}}">
@@ -540,18 +553,21 @@
                         </a>
                     </li>
                 </ul>
+                </div>
 
-                <!--파일다운로드-->
-                <div>
-                    <ul class="stats" th:each="file : ${fileDatalist}">
+                <!-- 파일다운로드 -->
+                <div id="files">
+                    <img th:if="${fileDatalist.size() > 0}" src="/images/download.png" alt="download" width="20px" height="20px">
+                    <ul class="stats" id="filesize" th:each="file : ${fileDatalist}">
                         <li>
-                            <a th:id="'fileLink_' + ${file.id}" href="#" class="download-link">
-                                첨부파일 : <span th:text="${file.orginName}"></span>
-                            </a>
+                            <div class="download-link-container">
+                                <a th:id="'fileLink_' + ${file.id}" href="#" class="download-link">
+                                    <span th:text="${file.orginName}"></span>
+                                </a>
+                            </div>
                         </li>
                     </ul>
                 </div>
-
 
 
             </footer>
@@ -580,7 +596,6 @@
         <button type="button" class="btn btn-outline-dark" id="submitbtn">등록</button>
         <button type="button" class="btn btn-outline-dark" id="reply_refresh">댓글 새로고침</button>
     </form>
-
 
 
     <!--댓글 보여주는 곳 -->

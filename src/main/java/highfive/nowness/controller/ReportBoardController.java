@@ -2,6 +2,7 @@ package highfive.nowness.controller;
 
 import highfive.nowness.dto.PostData;
 import highfive.nowness.dto.ReportDTO;
+import highfive.nowness.dto.ReportsDTO;
 import highfive.nowness.dto.TagsDTO;
 import highfive.nowness.service.ReportBoardService;
 import lombok.RequiredArgsConstructor;
@@ -70,7 +71,7 @@ public class ReportBoardController {
         model.addAttribute("currentPage", page);
         model.addAttribute("totalPages", totalPages);
 
-        return "/reportboard";
+        return "reportboard";
     }
 
     // 상세 페이지 조회
@@ -122,7 +123,7 @@ public class ReportBoardController {
         // 검색어를 URL 파라미터로 전달하여 페이지 이동에 유지되도록 함
         model.addAttribute("searchTitle", searchTitle);
 
-        return "/reportboard";
+        return "reportboard";
     }
 
     // 게시글 수정페이지로 이동
@@ -130,7 +131,7 @@ public class ReportBoardController {
     public String editPostForm(@PathVariable int postId, Model model) {
         ReportDTO post = reportBoardService.getPostById(postId);
         if (post == null) {
-            return "redirect:/report/board";
+            return "redirect:report/board";
         }
 
         model.addAttribute("post", post);
@@ -144,7 +145,7 @@ public class ReportBoardController {
         ReportDTO post = reportBoardService.getPostById(postId);
         if (post == null) {
             // 게시글이 존재하지 않을 경우 게시판으로 리다이렉트합니다.
-            return "redirect:/report/board";
+            return "redirect:report/board";
         }
 
         // 삭제 확인 페이지에 게시글 정보를 전달합니다.
@@ -163,4 +164,17 @@ public class ReportBoardController {
         return "redirect:/report/board";
     }
 
+    // 게시글 신고
+    @PostMapping("/board/{postId}/report")
+    public String reportPost(@PathVariable int postId, @RequestParam int reportUserId,
+                             @RequestParam String reportReason) {
+        ReportsDTO reportsDTO = new ReportsDTO();
+        reportsDTO.setReportedContentsId(postId);
+        reportsDTO.setReportUserId(reportUserId);
+        reportsDTO.setReportReason(reportReason);
+
+        reportBoardService.reportPost(reportsDTO);
+
+        return "redirect:/report/board/" + postId;
+    }
 }
