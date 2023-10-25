@@ -25,7 +25,7 @@
 </br>
 
 ### 5. ERD 설계
-![]()
+![](NOWNESS ERD.png)
 
 </br>
 
