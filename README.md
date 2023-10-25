@@ -25,7 +25,7 @@
 </br>
 
 ### 5. ERD 설계
-![]([NOWNESS ERD.png](https://github.com/hyseop/NOWNESS/blob/main/README.md))
+![](https://github.com/hyseop/NOWNESS/blob/main/README.md)
 
 </br>
 
