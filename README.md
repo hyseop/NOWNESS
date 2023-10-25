@@ -33,7 +33,7 @@
 > 메인 화면 페이지 구성
 > 
 > > 카카오 지도 API 활용  
-> > 🔗[]()
+> > 🔗[1](https://github.com/hyseop/SCENEMA/blob/master/src/main/java/common/login-mapping.xml), [2](https://github.com/hyseop/SCENEMA/blob/master/src/main/java/common/user-mapping.xml)
 > > 
 > > 오픈 채팅, 웹소켓  
 > > 🔗[]()
