@@ -33,13 +33,13 @@
 > 메인 화면 페이지 구성
 > 
 > > 카카오 지도 API 활용  
-> > 🔗[1](https://github.com/hyseop/SCENEMA/blob/master/src/main/java/common/login-mapping.xml), [2](https://github.com/hyseop/SCENEMA/blob/master/src/main/java/common/user-mapping.xml)
+> > 🔗[1](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/static/js/main/map.js), [2](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/static/css/main/map.css)
 > > 
 > > 오픈 채팅, 웹소켓  
-> > 🔗[]()
+> > 🔗[1](https://github.com/hyseop/NOWNESS/blob/main/src/main/java/highfive/nowness/controller/ChatController.java), [2](https://github.com/hyseop/NOWNESS/blob/main/src/main/java/highfive/nowness/config/WebSocketConfig.java), [3](https://github.com/hyseop/NOWNESS/blob/main/src/main/java/highfive/nowness/dto/ChatMessage.java), [4](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/static/css/main/chat.css), [5](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/static/js/main/chat.js)
 > > 
 > > 텍스트 캐러셀, 헤더 및 푸터  
-> > 🔗[]()
+> > 🔗[1](https://github.com/hyseop/NOWNESS/blob/main/src/main/java/highfive/nowness/controller/MainController.java), [2](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/templates/main.html), [3](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/static/css/main/main.css), [4](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/templates/header.html), [5](https://github.com/hyseop/NOWNESS/blob/main/src/main/resources/templates/footer.html)
 
 </br>
 
